@@ -2,7 +2,7 @@
 //  Camera.swift
 //  Alura Ponto
 //
-//  Created by Rogerio Cardoso Filho on 31/03/22.
+//  Created by Ândriu Felipe Coelho on 03/10/21.
 //
 
 import Foundation
@@ -17,7 +17,7 @@ class Camera: NSObject {
     weak var delegate: CameraDelegate?
     
     func abrirCamera(_ controller: UIViewController, _ imagePicker: UIImagePickerController) {
-        
+        imagePicker.delegate = self
         imagePicker.allowsEditing = true
         imagePicker.sourceType = .camera
         imagePicker.cameraDevice = UIImagePickerController.isCameraDeviceAvailable(.front) ? .front : .rear
@@ -39,10 +39,10 @@ extension Camera: UIImagePickerControllerDelegate & UINavigationControllerDelega
     func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
         
         picker.dismiss(animated: true)
-        
         guard let foto = info[.editedImage] as? UIImage else { return }
         
         delegate?.didSelectFoto(foto)
-        
     }
 }
+
+

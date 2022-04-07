@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import CoreData
 
 class ReciboViewController: UIViewController {
     
@@ -19,7 +20,25 @@ class ReciboViewController: UIViewController {
     // MARK: - Atributos
     
     private lazy var camera = Camera()
-    private lazy var controladorDeImagem = UIImagePickerController()
+    private lazy var controladorDeImage = UIImagePickerController()
+    
+    var contexto: NSManagedObjectContext = {
+        let contexto = UIApplication.shared.delegate as! AppDelegate
+        
+        return contexto.persistentContainer.viewContext
+    }()
+    
+    let buscador: NSFetchedResultsController<Recibo> = {
+        let fetchRequest: NSFetchRequest<Recibo> = Recibo.fetchRequest()
+        let sortDescriptor = NSSortDescriptor(key: "data", ascending: false)
+        fetchRequest.sortDescriptors = [sortDescriptor]
+        
+        let appDelegate = UIApplication.shared.delegate as! AppDelegate
+        return NSFetchedResultsController(fetchRequest: fetchRequest,
+                                          managedObjectContext: appDelegate.persistentContainer.viewContext,
+                                          sectionNameKeyPath: nil,
+                                          cacheName: nil)
+    }()
     
     // MARK: - View life cycle
 
@@ -27,13 +46,19 @@ class ReciboViewController: UIViewController {
         super.viewDidLoad()
         configuraTableView()
         configuraViewFoto()
+        buscador.delegate = self
     }
     
     override func viewDidAppear(_ animated: Bool) {
+        getRecibos()
         reciboTableView.reloadData()
     }
     
     // MARK: - Class methods
+    
+    func getRecibos() {
+        Recibo.carregar(buscador)
+    }
     
     func configuraViewFoto() {
         escolhaFotoView.layer.borderWidth = 1
@@ -48,31 +73,30 @@ class ReciboViewController: UIViewController {
         reciboTableView.register(UINib(nibName: "ReciboTableViewCell", bundle: nil), forCellReuseIdentifier: "ReciboTableViewCell")
     }
     
-    func mostraMenuEscolahaDeFoto() {
-        let menu = UIAlertController(title: "Seleção de foto", message: "Escolah uma foto da biblioteca", preferredStyle: .actionSheet)
+    func mostraMenuEscolhaDeFoto() {
+        let menu = UIAlertController(title: "Seleção de foto", message: "Escolha uma foto da biblioteca", preferredStyle: .actionSheet)
         menu.addAction(UIAlertAction(title: "Biblioteca de fotos", style: .default, handler: { action in
-            // O que é chamado após clicar nessa opção
             if UIImagePickerController.isSourceTypeAvailable(.photoLibrary) {
                 self.camera.delegate = self
-                self.camera.abrirBibliotecaFotos(self, self.controladorDeImagem)
+                self.camera.abrirBibliotecaFotos(self, self.controladorDeImage)
             }
         }))
-        menu.addAction(UIAlertAction(title: "cancelar", style: .destructive, handler: nil))
+        
+        menu.addAction(UIAlertAction(title: "Cancelar", style: .destructive, handler: nil))
+        
         present(menu, animated: true, completion: nil)
-        // tem que pedir permissão ao usuário no info.plist
     }
     
     // MARK: - IBActions
     
     @IBAction func escolherFotoButton(_ sender: UIButton) {
-        // TO DO: Abrir biblioteca de fotos
-        mostraMenuEscolahaDeFoto()
+        mostraMenuEscolhaDeFoto()
     }
 }
 
 extension ReciboViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return Secao.shared.listaDeRecibos.count
+        return buscador.fetchedObjects?.count ?? 0
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -80,7 +104,7 @@ extension ReciboViewController: UITableViewDataSource {
             fatalError("erro ao criar ReciboTableViewCell")
         }
         
-        let recibo = Secao.shared.listaDeRecibos[indexPath.row]
+        let recibo = buscador.fetchedObjects?[indexPath.row]
         cell.configuraCelula(recibo)
         cell.delegate = self
         cell.deletarButton.tag = indexPath.row
@@ -97,8 +121,8 @@ extension ReciboViewController: UITableViewDelegate {
 
 extension ReciboViewController: ReciboTableViewCellDelegate {
     func deletarRecibo(_ index: Int) {
-        Secao.shared.listaDeRecibos.remove(at: index)
-        reciboTableView.reloadData()
+        guard let recibo = buscador.fetchedObjects?[index] else { return }
+        recibo.deletar(contexto)
     }
 }
 
@@ -106,5 +130,20 @@ extension ReciboViewController: CameraDelegate {
     func didSelectFoto(_ image: UIImage) {
         escolhaFotoButton.isHidden = true
         fotoPerfilImageView.image = image
+    }
+}
+
+extension ReciboViewController: NSFetchedResultsControllerDelegate {
+    
+    func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
+        switch type {
+        case .delete:
+            if let indexPath = indexPath {
+                reciboTableView.deleteRows(at: [indexPath], with: .fade)
+            }
+            break
+        default:
+            reciboTableView.reloadData()
+        }
     }
 }
